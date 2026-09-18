@@ -1,0 +1,2 @@
+# Keep the Olist raw CSV dataset in Git LFS
+data/raw/*.csv filter=lfs diff=lfs merge=lfs -text
