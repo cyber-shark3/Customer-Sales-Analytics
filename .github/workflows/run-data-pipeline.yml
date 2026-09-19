@@ -1,0 +1,89 @@
+name: Run Olist Data Pipeline
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "notebooks/01_data_pipeline.py"
+      - "data/raw/**"
+      - ".github/workflows/run-data-pipeline.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pipeline:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository with Git LFS
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install --no-cache-dir pandas
+
+      - name: Verify raw dataset
+        run: |
+          set -euo pipefail
+          test -s data/raw/olist_orders_dataset.csv
+          test -s data/raw/olist_order_items_dataset.csv
+          test -s data/raw/olist_customers_dataset.csv
+          test -s data/raw/olist_products_dataset.csv
+          git lfs ls-files
+
+      - name: Run data pipeline
+        run: python notebooks/01_data_pipeline.py
+
+      - name: Validate processed master dataset
+        run: |
+          set -euo pipefail
+          test -s data/processed/master_sales_data.csv
+          python - <<'PY'
+          import pandas as pd
+          from pathlib import Path
+
+          p = Path("data/processed/master_sales_data.csv")
+          df = pd.read_csv(p)
+
+          required = {
+              "order_id",
+              "customer_id",
+              "product_id",
+              "price",
+              "freight_value",
+              "product_category_name",
+              "total_item_value",
+              "order_purchase_timestamp",
+          }
+
+          missing = required - set(df.columns)
+          assert not missing, f"Missing columns: {sorted(missing)}"
+          assert len(df) > 0, "Master dataset is empty"
+          assert df["order_id"].notna().any(), "No valid order IDs"
+          assert df["total_item_value"].notna().all(), "total_item_value contains nulls"
+          assert (df["total_item_value"] >= 0).all(), "Negative total_item_value found"
+
+          print(f"MASTER_ROWS={len(df):,}")
+          print(f"MASTER_COLUMNS={len(df.columns)}")
+          print(f"UNIQUE_ORDERS={df['order_id'].nunique():,}")
+          print(f"UNIQUE_CUSTOMERS={df['customer_id'].nunique():,}")
+          print(f"UNIQUE_PRODUCTS={df['product_id'].nunique():,}")
+          print(f"TOTAL_ITEM_VALUE={df['total_item_value'].sum():,.2f}")
+          print(f"OUTPUT_SIZE={p.stat().st_size:,} bytes")
+          print("PIPELINE_VALIDATION=PASS")
+          PY
+
+      - name: Upload processed dataset artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: master-sales-data
+          path: data/processed/master_sales_data.csv
+          retention-days: 7
