@@ -3,8 +3,6 @@ name: Import Olist Dataset via Git LFS
 on:
   push:
     branches: [main]
-    paths:
-      - ".github/workflows/import-olist-lfs.yml"
   workflow_dispatch:
 
 permissions:
