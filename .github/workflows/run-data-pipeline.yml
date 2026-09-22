@@ -1,10 +1,11 @@
-name: Run Olist Data Pipeline
+name: Run Olist Data Pipeline and EDA
 
 on:
   push:
     branches: [main]
     paths:
       - "notebooks/01_data_pipeline.py"
+      - "notebooks/02_eda.py"
       - "data/raw/**"
       - ".github/workflows/run-data-pipeline.yml"
   workflow_dispatch:
@@ -13,7 +14,7 @@ permissions:
   contents: read
 
 jobs:
-  pipeline:
+  analysis:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository with Git LFS
@@ -28,7 +29,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install dependencies
-        run: pip install --no-cache-dir pandas
+        run: pip install --no-cache-dir pandas matplotlib
 
       - name: Verify raw dataset
         run: |
@@ -81,9 +82,22 @@ jobs:
           print("PIPELINE_VALIDATION=PASS")
           PY
 
-      - name: Upload processed dataset artifact
+      - name: Run exploratory data analysis
+        run: python notebooks/02_eda.py
+
+      - name: Validate EDA outputs
+        run: |
+          set -euo pipefail
+          test -s dashboard/screenshots/monthly_revenue.png
+          test -s dashboard/screenshots/top_states_revenue.png
+          test -s dashboard/screenshots/top_categories_revenue.png
+          echo "EDA_VALIDATION=PASS"
+
+      - name: Upload analysis artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: master-sales-data
-          path: data/processed/master_sales_data.csv
+          name: olist-analysis-output
+          path: |
+            data/processed/master_sales_data.csv
+            dashboard/screenshots/*.png
           retention-days: 7
